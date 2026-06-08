@@ -169,12 +169,23 @@ fetch("sta_cipali.csv")
    }
  });
 
- staData.sort((a,b)=>a.sta-b.sta);
- console.log("Jumlah STA:",staData.length);
+staData.sort((a,b)=>a.sta-b.sta);
+
+console.log("Jumlah STA:",staData.length);
+
 console.log("STA Awal:",staData[0]);
+
 console.log("STA Akhir:",staData[staData.length-1]);
- document.getElementById("status").innerHTML="GPS Ready";
- startGPS();
+
+alert(
+"Jumlah STA = " + staData.length +
+"\nSTA Awal = " + staData[0].sta +
+"\nSTA Akhir = " + staData[staData.length-1].sta
+);
+
+document.getElementById("status").innerHTML="GPS Ready";
+
+startGPS();
 })
 .catch(err=>{
  document.getElementById("status").innerHTML="CSV Load Failed";
