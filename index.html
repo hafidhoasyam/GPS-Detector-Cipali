@@ -191,18 +191,121 @@ const HISTORY_SIZE=5;
 VARIABLE
 ======================================= */
 
-let staHistory=[];
-let gpsHistory=[];
+function findSTA(lat,lon){
 
-let GPS_SMOOTHING=3;
+let start;
+let end;
 
-let lastUpdate=0;
+/* =====================================
+FIRST FIX
+Cari seluruh dataset saat pertama kali
+===================================== */
 
-let lockedJalur="Detecting Direction...";
+if(firstFix){
 
-let offRouteCounter=0;
+start=0;
+end=staData.length-1;
 
-let lastNearestIndex=0;
+}else{
+
+start=Math.max(
+0,
+lastNearestIndex-150
+);
+
+end=Math.min(
+staData.length-1,
+lastNearestIndex+150
+);
+
+}
+
+let min=999999;
+let bestIndex=0;
+
+/* =====================================
+SEARCH
+===================================== */
+
+for(let i=start;i<=end;i++){
+
+let p=staData[i];
+
+let d=distance(
+lat,
+lon,
+p.lat,
+p.lon
+);
+
+if(d<min){
+
+min=d;
+bestIndex=i;
+
+}
+
+}
+
+lastNearestIndex=bestIndex;
+
+firstFix=false;
+
+let p=staData[bestIndex];
+
+/* =====================================
+OFF ROUTE
+===================================== */
+
+if(min>MAX_OFFSET){
+
+offRouteCounter++;
+
+}else{
+
+offRouteCounter=0;
+
+}
+
+/* =====================================
+OUTSIDE ALIGNMENT
+===================================== */
+
+if(offRouteCounter>=3){
+
+document.getElementById("sta").innerHTML=
+"---";
+
+document.getElementById("offset").innerHTML=
+"Offset ---";
+
+document.getElementById("segment").innerHTML=
+"Outside Alignment";
+
+document.getElementById("status").innerHTML=
+"Outside Alignment";
+
+return;
+
+}
+
+/* =====================================
+DISPLAY
+===================================== */
+
+document.getElementById("sta").innerHTML=
+formatSTA(p.sta);
+
+document.getElementById("offset").innerHTML=
+"Offset "+min.toFixed(1)+" m";
+
+document.getElementById("segment").innerHTML=
+p.segment;
+
+document.getElementById("status").innerHTML=
+"GPS Active";
+
+}
 
 /* =======================================
 DISTANCE
