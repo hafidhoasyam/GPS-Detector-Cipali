@@ -1,569 +1,182 @@
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
-
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GPS Detector Cipali</title>
-
 <style>
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-}
-
-body{
-font-family:Arial,Helvetica,sans-serif;
-background:white;
-display:flex;
-justify-content:center;
-align-items:center;
-min-height:100vh;
-}
-
-.container{
-width:100%;
-max-width:420px;
-padding:30px 20px;
-text-align:center;
-}
-
-.logo{
-margin-bottom:15px;
-}
-
-.logo img{
-width:180px;
-max-width:90%;
-}
-
-.title{
-font-size:28px;
-font-weight:700;
-color:#222;
-margin-bottom:40px;
-}
-
-.sta-label{
-font-size:72px;
-font-weight:800;
-color:#f57c00;
-}
-
-.sta-number{
-font-size:68px;
-font-weight:800;
-color:#f57c00;
-margin-top:5px;
-margin-bottom:25px;
-}
-
-.offset{
-font-size:28px;
-color:#222;
-margin-bottom:15px;
-}
-
-.speed{
-font-size:26px;
-font-weight:700;
-color:#444;
-margin-bottom:20px;
-}
-
-.segment{
-font-size:28px;
-font-weight:700;
-color:#111;
-margin-bottom:20px;
-}
-
-.status{
-font-size:16px;
-color:#777;
-line-height:1.5;
-}
-
-@media(max-width:480px){
-
-.logo img{
-width:150px;
-}
-
-.title{
-font-size:24px;
-}
-
-.sta-label{
-font-size:60px;
-}
-
-.sta-number{
-font-size:58px;
-}
-
-.segment{
-font-size:24px;
-}
-
-}
-
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.container{max-width:420px;width:100%;padding:24px;text-align:center}
+.logo img{width:180px;max-width:90%}
+.title{font-size:28px;font-weight:700;margin:20px 0 35px;color:#222}
+.sta-label{font-size:72px;font-weight:800;color:#f57c00}
+.sta-number{font-size:68px;font-weight:800;color:#f57c00}
+.offset{font-size:28px;margin-top:20px}
+.speed,.accuracy{font-size:22px;margin-top:12px;color:#444}
+.segment{font-size:28px;font-weight:700;margin-top:18px}
+.status{font-size:18px;color:#666;margin-top:18px}
 </style>
-
 </head>
-
 <body>
-
 <div class="container">
-
-<div class="logo">
-<img src="Logo_LMS.png">
-</div>
-
-<div class="title">
-STA Cikopo - Palimanan
-</div>
-
-<div class="sta-label">
-STA
-</div>
-
-<div class="sta-number" id="sta">
-Loading...
-</div>
-
-<div class="offset" id="offset">
-Offset ...
-</div>
-
-<div class="speed" id="speed">
-0 km/h
-</div>
-
-<div class="segment" id="segment">
-Loading Segment...
-</div>
-
-<div class="status" id="status">
-Waiting GPS...
-</div>
-
+<div class="logo"><img src="Logo_LMS.png" alt="Logo"></div>
+<div class="title">STA Cikopo - Palimanan</div>
+<div class="sta-label">STA</div>
+<div class="sta-number" id="sta">Loading...</div>
+<div class="offset" id="offset">Offset ...</div>
+<div class="speed" id="speed">0.0 km/h</div>
+<div class="accuracy" id="accuracy">GPS ...</div>
+<div class="segment" id="segment">Loading Segment...</div>
+<div class="status" id="status">Loading CSV...</div>
 </div>
 
 <script>
-
-/* =======================================
-DATABASE
-======================================= */
+const MAX_OFFSET=100;
+const MAX_GPS_ACCURACY=12;
+const UPDATE_INTERVAL=100;
+const LOCAL_RADIUS=600;
+const JUMP_THRESHOLD=60;
 
 let staData=[];
+let lastIndex=-1;
+let lastSTA=null;
+let lastUpdate=0;
 
-/* =======================================
-SETTING
-======================================= */
-
-const MAX_OFFSET=20;
-const MAX_GPS_ACCURACY=15;
-const MIN_DIRECTION_DELTA=10;
-const UPDATE_INTERVAL=100;
-const HISTORY_SIZE=5;
-
-/* =======================================
-VARIABLE
-======================================= */
-
-function findSTA(lat,lon){
-
-let start;
-let end;
-
-/* =====================================
-FIRST FIX
-Cari seluruh dataset saat pertama kali
-===================================== */
-
-if(firstFix){
-
-start=0;
-end=staData.length-1;
-
-}else{
-
-start=Math.max(
-0,
-lastNearestIndex-150
-);
-
-end=Math.min(
-staData.length-1,
-lastNearestIndex+150
-);
-
+class Kalman{
+ constructor(r=0.00001,q=0.0001){this.r=r;this.q=q;this.x=null;this.p=1;}
+ filter(z){
+  if(this.x===null){this.x=z;return z;}
+  this.p+=this.q;
+  const k=this.p/(this.p+this.r);
+  this.x=this.x+k*(z-this.x);
+  this.p=(1-k)*this.p;
+  return this.x;
+ }
 }
 
-let min=999999;
-let bestIndex=0;
-
-/* =====================================
-SEARCH
-===================================== */
-
-for(let i=start;i<=end;i++){
-
-let p=staData[i];
-
-let d=distance(
-lat,
-lon,
-p.lat,
-p.lon
-);
-
-if(d<min){
-
-min=d;
-bestIndex=i;
-
-}
-
-}
-
-lastNearestIndex=bestIndex;
-
-firstFix=false;
-
-let p=staData[bestIndex];
-
-/* =====================================
-OFF ROUTE
-===================================== */
-
-if(min>MAX_OFFSET){
-
-offRouteCounter++;
-
-}else{
-
-offRouteCounter=0;
-
-}
-
-/* =====================================
-OUTSIDE ALIGNMENT
-===================================== */
-
-if(offRouteCounter>=3){
-
-document.getElementById("sta").innerHTML=
-"---";
-
-document.getElementById("offset").innerHTML=
-"Offset ---";
-
-document.getElementById("segment").innerHTML=
-"Outside Alignment";
-
-document.getElementById("status").innerHTML=
-"Outside Alignment";
-
-return;
-
-}
-
-/* =====================================
-DISPLAY
-===================================== */
-
-document.getElementById("sta").innerHTML=
-formatSTA(p.sta);
-
-document.getElementById("offset").innerHTML=
-"Offset "+min.toFixed(1)+" m";
-
-document.getElementById("segment").innerHTML=
-p.segment;
-
-document.getElementById("status").innerHTML=
-"GPS Active";
-
-}
-
-/* =======================================
-DISTANCE
-======================================= */
+const latKF=new Kalman();
+const lonKF=new Kalman();
 
 function distance(lat1,lon1,lat2,lon2){
-
-const R=6371000;
-
-let dLat=(lat2-lat1)*Math.PI/180;
-let dLon=(lon2-lon1)*Math.PI/180;
-
-let a=
-Math.sin(dLat/2)**2+
-Math.cos(lat1*Math.PI/180)*
-Math.cos(lat2*Math.PI/180)*
-Math.sin(dLon/2)**2;
-
-return R*2*Math.atan2(
-Math.sqrt(a),
-Math.sqrt(1-a)
-);
-
+ const R=6371000;
+ const dLat=(lat2-lat1)*Math.PI/180;
+ const dLon=(lon2-lon1)*Math.PI/180;
+ const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+ return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
-
-/* =======================================
-FORMAT STA
-======================================= */
 
 function formatSTA(sta){
-
-let km=Math.floor(sta/1000);
-
-let meter=Math.round(sta%1000);
-
-return km+"+"+meter.toString().padStart(3,"0");
-
+ const km=Math.floor(sta/1000);
+ const m=Math.round(sta%1000);
+ return km+"+"+String(m).padStart(3,"0");
 }
 
-/* =======================================
-FIND STA
-======================================= */
+function nearestPoint(lat,lon){
+ let start=0,end=staData.length-1;
 
-function findSTA(lat,lon){
+ if(lastIndex>=0){
+   start=Math.max(0,lastIndex-LOCAL_RADIUS);
+   end=Math.min(staData.length-1,lastIndex+LOCAL_RADIUS);
+ } else {
+   // first fix full search
+   start=0; end=staData.length-1;
+ }
 
-let min=999999999;
+ let min=Infinity,best=-1;
 
-let nearest=null;
+ for(let i=start;i<=end;i++){
+   const d=distance(lat,lon,staData[i].lat,staData[i].lon);
+   if(d<min){min=d;best=i;}
+ }
 
-/* Cari seluruh database */
-
-for(let i=0;i<staData.length;i++){
-
-let p=staData[i];
-
-let d=distance(
-lat,
-lon,
-p.lat,
-p.lon
-);
-
-if(d<min){
-
-min=d;
-nearest=p;
-
+ return {idx:best,dist:min,row:staData[best]};
 }
 
+function updateDisplay(lat,lon){
+ const res=nearestPoint(lat,lon);
+ if(!res.row)return;
+
+ let sta=res.row.sta;
+
+ if(lastSTA!==null && Math.abs(sta-lastSTA)>JUMP_THRESHOLD){
+   sta=lastSTA;
+ }else{
+   lastSTA=sta;
+   lastIndex=res.idx;
+ }
+
+ if(res.dist>MAX_OFFSET){
+   document.getElementById("sta").innerHTML="---";
+   document.getElementById("offset").innerHTML="Offset ---";
+   document.getElementById("segment").innerHTML="Out Of Cipali Area";
+   document.getElementById("status").innerHTML="Out Of Cipali Area";
+   return;
+ }
+
+ document.getElementById("sta").innerHTML=formatSTA(sta);
+ document.getElementById("offset").innerHTML="Offset "+res.dist.toFixed(1)+" m";
+ document.getElementById("segment").innerHTML=res.row.segment;
+ document.getElementById("status").innerHTML="GPS Active";
 }
-
-/* Tidak ditemukan */
-
-if(!nearest){
-
-document.getElementById("status").innerHTML=
-"STA Not Found";
-
-return;
-
-}
-
-/* Outside alignment */
-
-if(min > MAX_OFFSET){
-
-document.getElementById("sta").innerHTML=
-"---";
-
-document.getElementById("offset").innerHTML=
-"Offset ---";
-
-document.getElementById("segment").innerHTML=
-"Outside Alignment";
-
-document.getElementById("status").innerHTML=
-"Outside Alignment";
-
-return;
-
-}
-
-/* Tampilkan hasil */
-
-document.getElementById("sta").innerHTML=
-formatSTA(nearest.sta);
-
-document.getElementById("offset").innerHTML=
-"Offset "+min.toFixed(1)+" m";
-
-document.getElementById("segment").innerHTML=
-nearest.segment;
-
-document.getElementById("status").innerHTML=
-"GPS Active";
-
-}
-
-/* =======================================
-START GPS
-======================================= */
 
 function startGPS(){
+ navigator.geolocation.watchPosition(
+ pos=>{
+   const now=Date.now();
+   if(now-lastUpdate<UPDATE_INTERVAL)return;
+   lastUpdate=now;
 
-navigator.geolocation.watchPosition(
+   const acc=pos.coords.accuracy||999;
+   document.getElementById("accuracy").innerHTML="GPS ±"+acc.toFixed(1)+" m";
 
-function(pos){
+   if(acc>MAX_GPS_ACCURACY){
+      document.getElementById("status").innerHTML="GPS Accuracy Poor";
+      return;
+   }
 
-let now=Date.now();
+   const speed=(pos.coords.speed||0)*3.6;
+   document.getElementById("speed").innerHTML=speed.toFixed(1)+" km/h";
 
-if(now-lastUpdate<UPDATE_INTERVAL){
+   const lat=latKF.filter(pos.coords.latitude);
+   const lon=lonKF.filter(pos.coords.longitude);
 
-return;
-
+   updateDisplay(lat,lon);
+ },
+ err=>{
+   document.getElementById("status").innerHTML="GPS Error";
+   console.log(err);
+ },
+ {enableHighAccuracy:true,maximumAge:0,timeout:5000}
+ );
 }
-
-lastUpdate=now;
-
-if(pos.coords.accuracy>
-MAX_GPS_ACCURACY){
-
-document.getElementById("status").innerHTML=
-"Poor GPS Accuracy";
-
-return;
-
-}
-
-let speed=
-(pos.coords.speed||0)*3.6;
-
-document.getElementById("speed").innerHTML=
-speed.toFixed(1)+" km/h";
-
-if(speed>25){
-
-GPS_SMOOTHING=1;
-
-}
-else if(speed>15){
-
-GPS_SMOOTHING=2;
-
-}
-else if(speed>5){
-
-GPS_SMOOTHING=3;
-
-}
-else{
-
-GPS_SMOOTHING=5;
-
-}
-
-gpsHistory.push({
-
-lat:pos.coords.latitude,
-lon:pos.coords.longitude
-
-});
-
-if(gpsHistory.length>
-GPS_SMOOTHING){
-
-gpsHistory.shift();
-
-}
-
-let lat=0;
-let lon=0;
-
-gpsHistory.forEach(p=>{
-
-lat+=p.lat;
-lon+=p.lon;
-
-});
-
-lat/=gpsHistory.length;
-lon/=gpsHistory.length;
-
-findSTA(lat,lon);
-
-},
-
-function(){
-
-document.getElementById("status").innerHTML=
-"GPS Error";
-
-},
-
-{
-enableHighAccuracy:true,
-maximumAge:0,
-timeout:5000
-}
-
-);
-
-}
-
-/* =======================================
-LOAD CSV
-======================================= */
 
 fetch("sta_cipali.csv")
-
 .then(r=>r.text())
-
 .then(text=>{
+ const rows=text.trim().split(/\\r?\\n/);
+ rows.shift();
 
-let rows=
-text.trim().split("\n");
+ rows.forEach(line=>{
+   const c=line.split(",");
+   if(c.length>=4){
+     staData.push({
+      sta:Number(c[0]),
+      lat:Number(c[1]),
+      lon:Number(c[2]),
+      segment:c.slice(3).join(",").trim()
+     });
+   }
+ });
 
-rows.shift();
-
-rows.forEach(r=>{
-
-let c=r.split(",");
-
-if(c.length>=4){
-
-staData.push({
-
-sta:parseFloat(c[0]),
-lat:parseFloat(c[1]),
-lon:parseFloat(c[2]),
-segment:c[3]
-
-});
-
-}
-
-});
-
-document.getElementById("status").innerHTML=
-"GPS Ready";
-
-startGPS();
-
+ staData.sort((a,b)=>a.sta-b.sta);
+ document.getElementById("status").innerHTML="GPS Ready";
+ startGPS();
 })
-
-.catch(()=>{
-
-document.getElementById("status").innerHTML=
-"CSV Load Failed";
-
+.catch(err=>{
+ document.getElementById("status").innerHTML="CSV Load Failed";
+ console.log(err);
 });
-
 </script>
-
 </body>
-
 </html>
