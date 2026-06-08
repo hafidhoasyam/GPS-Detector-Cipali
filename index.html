@@ -82,13 +82,6 @@ color:#111;
 margin-bottom:20px;
 }
 
-.jalur{
-font-size:28px;
-font-weight:700;
-color:#f57c00;
-margin-bottom:15px;
-}
-
 .status{
 font-size:16px;
 color:#777;
@@ -114,10 +107,6 @@ font-size:58px;
 }
 
 .segment{
-font-size:24px;
-}
-
-.jalur{
 font-size:24px;
 }
 
@@ -157,10 +146,6 @@ Offset ...
 
 <div class="segment" id="segment">
 Loading Segment...
-</div>
-
-<div class="jalur" id="jalur">
-Detecting Direction...
 </div>
 
 <div class="status" id="status">
@@ -351,18 +336,13 @@ FIND STA
 
 function findSTA(lat,lon){
 
-let start=Math.max(0,lastNearestIndex-100);
+let min=999999999;
 
-let end=Math.min(
-staData.length-1,
-lastNearestIndex+100
-);
+let nearest=null;
 
-let min=999999;
+/* Cari seluruh database */
 
-let bestIndex=lastNearestIndex;
-
-for(let i=start;i<=end;i++){
+for(let i=0;i<staData.length;i++){
 
 let p=staData[i];
 
@@ -376,27 +356,35 @@ p.lon
 if(d<min){
 
 min=d;
-bestIndex=i;
+nearest=p;
 
 }
 
 }
 
-lastNearestIndex=bestIndex;
+/* Tidak ditemukan */
 
-let p=staData[bestIndex];
+if(!nearest){
 
-if(min>MAX_OFFSET){
+document.getElementById("status").innerHTML=
+"STA Not Found";
 
-offRouteCounter++;
-
-}else{
-
-offRouteCounter=0;
+return;
 
 }
 
-if(offRouteCounter>=3){
+/* Outside alignment */
+
+if(min > MAX_OFFSET){
+
+document.getElementById("sta").innerHTML=
+"---";
+
+document.getElementById("offset").innerHTML=
+"Offset ---";
+
+document.getElementById("segment").innerHTML=
+"Outside Alignment";
 
 document.getElementById("status").innerHTML=
 "Outside Alignment";
@@ -405,49 +393,16 @@ return;
 
 }
 
-let sta=p.sta;
-
-staHistory.push(sta);
-
-if(staHistory.length>HISTORY_SIZE){
-
-staHistory.shift();
-
-}
-
-if(staHistory.length>=2){
-
-let delta=
-staHistory[staHistory.length-1]
--
-staHistory[0];
-
-if(delta>=MIN_DIRECTION_DELTA){
-
-lockedJalur=
-"Cikopo → Palimanan";
-
-}
-else if(delta<=-MIN_DIRECTION_DELTA){
-
-lockedJalur=
-"Palimanan → Cikopo";
-
-}
-
-}
+/* Tampilkan hasil */
 
 document.getElementById("sta").innerHTML=
-formatSTA(sta);
+formatSTA(nearest.sta);
 
 document.getElementById("offset").innerHTML=
 "Offset "+min.toFixed(1)+" m";
 
 document.getElementById("segment").innerHTML=
-p.segment;
-
-document.getElementById("jalur").innerHTML=
-lockedJalur;
+nearest.segment;
 
 document.getElementById("status").innerHTML=
 "GPS Active";
